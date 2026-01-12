@@ -28,7 +28,9 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 
@@ -37,7 +39,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int PERMISSION_REQUEST_CODE = 100;
 
     private RecyclerView recyclerView;
-    private NotesAdapter adapter;
+    private GroupedNotesAdapter adapter;
     private FloatingActionButton fabRecord;
     private TextView textEmpty;
     private ImageButton btnSettings;
@@ -73,9 +75,10 @@ public class MainActivity extends AppCompatActivity {
         btnTimer = findViewById(R.id.btnTimer);
         btnDone = findViewById(R.id.btnDone);
 
-        adapter = new NotesAdapter();
+        adapter = new GroupedNotesAdapter();
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
+        recyclerView.addItemDecoration(new StickyHeaderDecoration(adapter));
 
         timerHandler = new Handler(Looper.getMainLooper());
 
@@ -309,46 +312,114 @@ public class MainActivity extends AppCompatActivity {
         return !getIntent().getBooleanExtra("authenticated", false);
     }
 
-    private class NotesAdapter extends RecyclerView.Adapter<NotesAdapter.ViewHolder> {
+    private class GroupedNotesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
+            implements StickyHeaderDecoration.StickyHeaderInterface {
 
-        private List<Note> notes = new ArrayList<>();
+        private List<ListItem> items = new ArrayList<>();
+        private final SimpleDateFormat monthFormat = new SimpleDateFormat("MMMM yyyy", Locale.getDefault());
 
         public void setNotes(List<Note> notes) {
-            this.notes = notes;
+            this.items = groupNotesByMonth(notes);
             notifyDataSetChanged();
+        }
+
+        private List<ListItem> groupNotesByMonth(List<Note> notes) {
+            List<ListItem> result = new ArrayList<>();
+            String currentMonth = null;
+            Calendar cal = Calendar.getInstance();
+
+            for (Note note : notes) {
+                cal.setTime(note.getTimestamp());
+                String monthYear = monthFormat.format(cal.getTime());
+
+                if (!monthYear.equals(currentMonth)) {
+                    currentMonth = monthYear;
+                    result.add(ListItem.createHeader(monthYear));
+                }
+                result.add(ListItem.createNote(note));
+            }
+            return result;
+        }
+
+        @Override
+        public int getItemViewType(int position) {
+            return items.get(position).getType();
         }
 
         @NonNull
         @Override
-        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View view = LayoutInflater.from(parent.getContext())
-                    .inflate(R.layout.note_list_item, parent, false);
-            return new ViewHolder(view);
+        public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            if (viewType == ListItem.TYPE_HEADER) {
+                View view = LayoutInflater.from(parent.getContext())
+                        .inflate(R.layout.month_header_item, parent, false);
+                return new HeaderViewHolder(view);
+            } else {
+                View view = LayoutInflater.from(parent.getContext())
+                        .inflate(R.layout.note_list_item, parent, false);
+                return new NoteViewHolder(view);
+            }
         }
 
         @Override
-        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-            Note note = notes.get(position);
-            holder.textDate.setText(note.getFormattedDate());
-            holder.textPreview.setText(note.getPreview());
+        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+            ListItem item = items.get(position);
+            if (item.isHeader()) {
+                ((HeaderViewHolder) holder).textHeader.setText(item.getHeaderText());
+            } else {
+                Note note = item.getNote();
+                NoteViewHolder noteHolder = (NoteViewHolder) holder;
+                noteHolder.textDate.setText(note.getFormattedDate());
+                noteHolder.textPreview.setText(note.getPreview());
 
-            holder.itemView.setOnClickListener(v -> showNoteDetail(note));
-            holder.itemView.setOnLongClickListener(v -> {
-                deleteNoteWithConfirmation(note);
-                return true;
-            });
+                noteHolder.itemView.setOnClickListener(v -> showNoteDetail(note));
+                noteHolder.itemView.setOnLongClickListener(v -> {
+                    deleteNoteWithConfirmation(note);
+                    return true;
+                });
+            }
         }
 
         @Override
         public int getItemCount() {
-            return notes.size();
+            return items.size();
         }
 
-        class ViewHolder extends RecyclerView.ViewHolder {
+        @Override
+        public boolean isHeader(int itemPosition) {
+            if (itemPosition < 0 || itemPosition >= items.size()) return false;
+            return items.get(itemPosition).isHeader();
+        }
+
+        @Override
+        public int getHeaderPositionForItem(int itemPosition) {
+            for (int i = itemPosition; i >= 0; i--) {
+                if (items.get(i).isHeader()) {
+                    return i;
+                }
+            }
+            return RecyclerView.NO_POSITION;
+        }
+
+        @Override
+        public void bindHeaderData(View header, int headerPosition) {
+            TextView textHeader = header.findViewById(R.id.textMonthHeader);
+            textHeader.setText(items.get(headerPosition).getHeaderText());
+        }
+
+        class HeaderViewHolder extends RecyclerView.ViewHolder {
+            TextView textHeader;
+
+            HeaderViewHolder(View itemView) {
+                super(itemView);
+                textHeader = itemView.findViewById(R.id.textMonthHeader);
+            }
+        }
+
+        class NoteViewHolder extends RecyclerView.ViewHolder {
             TextView textDate;
             TextView textPreview;
 
-            ViewHolder(View itemView) {
+            NoteViewHolder(View itemView) {
                 super(itemView);
                 textDate = itemView.findViewById(R.id.textDate);
                 textPreview = itemView.findViewById(R.id.textPreview);

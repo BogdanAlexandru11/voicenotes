@@ -15,13 +15,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-VoiceNotes is a minimal Android app for capturing voice notes using on-device speech-to-text. Target device is Pixel 7 Pro (Android 13+).
+VoiceNotes is a minimal Android app for capturing voice notes using on-device speech-to-text. Optimized for Pixel devices with on-device speech recognition (Android 8.0+).
 
 **Core flow:**
 - Home screen widget triggers VoiceRecordingService via Intent
 - Service uses SpeechRecognizer for on-device transcription
-- Transcribed text saved as timestamped `.txt` files to `/Documents/obsidian-vault/voice-notes/raw-notes/`
-- MainActivity displays notes list from that folder
+- Transcribed text saved as timestamped `.md` files to configurable folder
+- MainActivity displays notes grouped by month with sticky headers
 
 ## Architecture
 
@@ -33,10 +33,10 @@ VoiceRecordingService (Foreground Service)
     │ SpeechRecognizer
     │ FileHelper.saveNote()
     ▼
-Documents/obsidian-vault/voice-notes/raw-notes/*.md
+[Configurable folder]/*.md
     │
     ▼
-MainActivity (RecyclerView of notes)
+MainActivity (RecyclerView with month grouping)
 ```
 
 ## Key Classes (to be implemented in `com.alex.voicenotes`)
@@ -46,15 +46,17 @@ MainActivity (RecyclerView of notes)
 | `MainActivity.java` | Notes list with RecyclerView, FAB to record |
 | `VoiceRecordingService.java` | Foreground service managing SpeechRecognizer |
 | `VoiceNotesWidget.java` | Home screen widget with record/stop toggle |
-| `FileHelper.java` | File I/O to Documents/obsidian-vault/voice-notes/raw-notes/ |
+| `FileHelper.java` | File I/O to configurable storage location |
 | `Note.java` | Data class for notes |
+| `ListItem.java` | Wrapper for grouped list items (headers + notes) |
+| `StickyHeaderDecoration.java` | RecyclerView decoration for sticky month headers |
 
 ## Implementation Details
 
 - **Package:** `com.alex.voicenotes` (not `com.example.voicenotes`)
 - **Speech recognition:** Use `SpeechRecognizer.createOnDeviceSpeechRecognizer()` for offline Pixel model
 - **File naming:** `yyyy-MM-dd_HH-mm-ss.md` format
-- **Storage:** `Environment.getExternalStoragePublicDirectory(DIRECTORY_DOCUMENTS)/obsidian-vault/voice-notes/raw-notes/`
+- **Storage:** Configurable via Settings, defaults to Documents folder
 - **Service broadcasts:** `RECORDING_STARTED`, `RECORDING_STOPPED`, `NOTE_SAVED`, `ERROR`
 
 ## Required Permissions

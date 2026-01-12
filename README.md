@@ -9,6 +9,7 @@ A simple Android app for capturing voice notes using on-device speech-to-text.
 - **Home screen widget** - Quick access to start/stop recording
 - **Configurable save location** - Choose where to save your notes
 - **Markdown output** - Notes saved as `.md` files with timestamp headers
+- **Month grouping** - Notes organized by month with sticky headers
 
 ## Requirements
 
@@ -27,17 +28,41 @@ Notes are saved as markdown files with the format:
   [transcribed text]
   ```
 
-## Building
+## Building & Installation
+
+### Prerequisites
+
+- Java 17 or higher
+- Android SDK (via Android Studio or command line tools)
+- USB debugging enabled on your device
+
+### Build Debug APK
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-## Installation
+APK location: `app/build/outputs/apk/debug/app-debug.apk`
+
+### Build & Install (connected device)
+
+```bash
+./gradlew installDebug
+```
+
+### Manual Installation via ADB
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+### Build Release APK
+
+```bash
+./gradlew assembleRelease
+```
+
+Note: Release builds require signing configuration in `app/build.gradle`.
 
 ## Usage
 
