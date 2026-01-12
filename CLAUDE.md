@@ -74,6 +74,3 @@ RECORD_AUDIO, FOREGROUND_SERVICE, FOREGROUND_SERVICE_MICROPHONE, POST_NOTIFICATI
 5. VoiceNotesWidget
 6. Polish and error handling
 
-## Reference
-
-See `instructions.md` for complete technical specification including layouts, component specs, and testing checklist.
