@@ -20,7 +20,7 @@ VoiceNotes is a minimal Android app for capturing voice notes using on-device sp
 **Core flow:**
 - Home screen widget triggers VoiceRecordingService via Intent
 - Service uses SpeechRecognizer for on-device transcription
-- Transcribed text saved as timestamped `.txt` files to `/Documents/VoiceNotes/`
+- Transcribed text saved as timestamped `.txt` files to `/Documents/obsidian-vault/voice-notes/raw-notes/`
 - MainActivity displays notes list from that folder
 
 ## Architecture
@@ -33,7 +33,7 @@ VoiceRecordingService (Foreground Service)
     │ SpeechRecognizer
     │ FileHelper.saveNote()
     ▼
-Documents/VoiceNotes/*.txt
+Documents/obsidian-vault/voice-notes/raw-notes/*.md
     │
     ▼
 MainActivity (RecyclerView of notes)
@@ -46,15 +46,15 @@ MainActivity (RecyclerView of notes)
 | `MainActivity.java` | Notes list with RecyclerView, FAB to record |
 | `VoiceRecordingService.java` | Foreground service managing SpeechRecognizer |
 | `VoiceNotesWidget.java` | Home screen widget with record/stop toggle |
-| `FileHelper.java` | File I/O to Documents/VoiceNotes/ |
+| `FileHelper.java` | File I/O to Documents/obsidian-vault/voice-notes/raw-notes/ |
 | `Note.java` | Data class for notes |
 
 ## Implementation Details
 
 - **Package:** `com.alex.voicenotes` (not `com.example.voicenotes`)
 - **Speech recognition:** Use `SpeechRecognizer.createOnDeviceSpeechRecognizer()` for offline Pixel model
-- **File naming:** `yyyy-MM-dd_HH-mm-ss.txt` format
-- **Storage:** `Environment.getExternalStoragePublicDirectory(DIRECTORY_DOCUMENTS)/VoiceNotes/`
+- **File naming:** `yyyy-MM-dd_HH-mm-ss.md` format
+- **Storage:** `Environment.getExternalStoragePublicDirectory(DIRECTORY_DOCUMENTS)/obsidian-vault/voice-notes/raw-notes/`
 - **Service broadcasts:** `RECORDING_STARTED`, `RECORDING_STOPPED`, `NOTE_SAVED`, `ERROR`
 
 ## Required Permissions

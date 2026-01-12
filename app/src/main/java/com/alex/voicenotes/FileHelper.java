@@ -26,7 +26,7 @@ import java.util.Locale;
 public class FileHelper {
 
     private static final String TAG = "FileHelper";
-    private static final String FOLDER_NAME = "VoiceNotes";
+    private static final String FOLDER_NAME = "obsidian-vault/voice-notes/raw-notes";
     private static final String PREFS_NAME = "VoiceNotesPrefs";
     private static final String PREF_SAVE_URI = "save_uri";
 

@@ -55,6 +55,13 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (shouldShowLockScreen()) {
+            startActivity(new Intent(this, LockScreenActivity.class));
+            finish();
+            return;
+        }
+
         setContentView(R.layout.activity_main);
 
         recyclerView = findViewById(R.id.recyclerNotes);
@@ -296,6 +303,10 @@ public class MainActivity extends AppCompatActivity {
             fabRecord.setImageResource(R.drawable.ic_mic);
             fabRecord.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.primary));
         }
+    }
+
+    private boolean shouldShowLockScreen() {
+        return !getIntent().getBooleanExtra("authenticated", false);
     }
 
     private class NotesAdapter extends RecyclerView.Adapter<NotesAdapter.ViewHolder> {

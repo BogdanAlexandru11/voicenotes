@@ -36,6 +36,11 @@
             android:name=".SettingsActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".LockScreenActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VoiceNotes" />
+
         <service
             android:name=".VoiceRecordingService"
             android:enabled="true"

@@ -19,8 +19,13 @@
     <string name="settings">Settings</string>
     <string name="save_location">Save location</string>
     <string name="change_folder">Change folder</string>
-    <string name="default_folder">Documents/VoiceNotes</string>
+    <string name="default_folder">Documents/obsidian-vault/voice-notes/raw-notes</string>
     <string name="no_speech_detected">No speech detected</string>
     <string name="note_saved">Note saved</string>
     <string name="paused">Paused</string>
+    <string name="unlock">Unlock</string>
+    <string name="unlock_subtitle">Authenticate to access your notes</string>
+    <string name="auth_failed">Authentication failed</string>
+    <string name="app_lock">App lock</string>
+    <string name="app_lock_description">Require authentication to open app</string>
 </resources>
