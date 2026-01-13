@@ -5,22 +5,25 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.media.AudioManager;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.speech.RecognitionListener;
-import android.speech.RecognizerIntent;
-import android.speech.SpeechRecognizer;
 import android.util.Log;
-import android.widget.Toast;
 
 import androidx.core.app.NotificationCompat;
+import androidx.work.Data;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkManager;
 
 import java.io.File;
-import java.util.ArrayList;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class VoiceRecordingService extends Service {
 
@@ -44,17 +47,20 @@ public class VoiceRecordingService extends Service {
     private static volatile boolean sIsRecording = false;
     private static volatile boolean sIsPaused = false;
 
-    private SpeechRecognizer speechRecognizer;
-    private StringBuilder transcriptionBuffer;
-    private String lastPartialResult = "";
+    private AudioRecorder audioRecorder;
     private boolean isRecording = false;
     private boolean isPaused = false;
     private Handler mainHandler;
+    private AudioManager audioManager;
+    private int originalVolume;
+    private FloatingTranscriptionView floatingView;
+    private ExecutorService backgroundExecutor;
 
     @Override
     public void onCreate() {
         super.onCreate();
         mainHandler = new Handler(Looper.getMainLooper());
+        backgroundExecutor = Executors.newSingleThreadExecutor();
         createNotificationChannel();
         Log.d(TAG, "Service created");
     }
@@ -83,7 +89,12 @@ public class VoiceRecordingService extends Service {
     @Override
     public void onDestroy() {
         Log.d(TAG, "Service destroyed");
-        stopRecording();
+        if (isRecording) {
+            stopRecording();
+        }
+        if (backgroundExecutor != null) {
+            backgroundExecutor.shutdown();
+        }
         super.onDestroy();
     }
 
@@ -102,11 +113,32 @@ public class VoiceRecordingService extends Service {
         isPaused = false;
         sIsRecording = true;
         sIsPaused = false;
-        transcriptionBuffer = new StringBuilder();
+
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager != null) {
+            originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
+        }
 
         startForeground(NOTIFICATION_ID, createNotification());
-        initializeSpeechRecognizer();
-        startListening();
+
+        if (FloatingTranscriptionView.canDrawOverlays(this)) {
+            floatingView = new FloatingTranscriptionView(this);
+            floatingView.show();
+            floatingView.updateText(getString(R.string.recording));
+        }
+
+        backgroundExecutor.execute(() -> {
+            try {
+                WhisperModelManager.ensureModelAvailable(this);
+                Log.d(TAG, "Whisper model ready");
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to prepare Whisper model", e);
+            }
+        });
+
+        audioRecorder = new AudioRecorder();
+        audioRecorder.startRecording();
 
         sendBroadcast(BROADCAST_RECORDING_STARTED);
         VoiceNotesWidget.updateAllWidgets(this, true);
@@ -123,117 +155,81 @@ public class VoiceRecordingService extends Service {
         sIsRecording = false;
         sIsPaused = false;
 
-        if (speechRecognizer != null) {
-            speechRecognizer.stopListening();
+        if (audioManager != null) {
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0);
         }
 
-        mainHandler.postDelayed(() -> {
-            if (speechRecognizer != null) {
-                speechRecognizer.destroy();
-                speechRecognizer = null;
+        if (floatingView != null) {
+            floatingView.hide();
+            floatingView = null;
+        }
+
+        byte[] pcmData = audioRecorder.stopRecording();
+
+        if (pcmData.length > 0) {
+            try {
+                File audioFile = savePcmToFile(pcmData);
+                enqueueTranscription(audioFile);
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to save audio file", e);
+                sendErrorBroadcast("Failed to save recording");
             }
-            saveTranscription();
-            sendBroadcast(BROADCAST_RECORDING_STOPPED);
-            VoiceNotesWidget.updateAllWidgets(this, false);
-            stopForeground(true);
-            stopSelf();
-        }, 1000);
+        } else {
+            sendErrorBroadcast(getString(R.string.no_speech_detected));
+        }
+
+        finishService();
+    }
+
+    private File savePcmToFile(byte[] pcmData) throws IOException {
+        File audioDir = new File(getCacheDir(), "audio_queue");
+        if (!audioDir.exists()) {
+            audioDir.mkdirs();
+        }
+        File audioFile = new File(audioDir, "recording_" + System.currentTimeMillis() + ".pcm");
+        try (FileOutputStream fos = new FileOutputStream(audioFile)) {
+            fos.write(pcmData);
+        }
+        Log.d(TAG, "Saved audio to " + audioFile.getAbsolutePath() + " (" + pcmData.length + " bytes)");
+        return audioFile;
+    }
+
+    private void enqueueTranscription(File audioFile) {
+        Data inputData = new Data.Builder()
+                .putString(TranscriptionWorker.KEY_AUDIO_FILE_PATH, audioFile.getAbsolutePath())
+                .build();
+
+        OneTimeWorkRequest workRequest = new OneTimeWorkRequest.Builder(TranscriptionWorker.class)
+                .setInputData(inputData)
+                .build();
+
+        WorkManager.getInstance(this)
+                .enqueueUniqueWork("transcription", androidx.work.ExistingWorkPolicy.APPEND, workRequest);
+        Log.d(TAG, "Enqueued transcription for " + audioFile.getName());
+    }
+
+    private void sendErrorBroadcast(String message) {
+        Intent errorIntent = new Intent(BROADCAST_ERROR);
+        errorIntent.putExtra(EXTRA_ERROR_MESSAGE, message);
+        sendBroadcast(errorIntent);
+    }
+
+    private void finishService() {
+        sendBroadcast(BROADCAST_RECORDING_STOPPED);
+        VoiceNotesWidget.updateAllWidgets(this, false);
+        stopForeground(true);
+        stopSelf();
     }
 
     private void pauseRecording() {
-        if (!isRecording || isPaused) {
-            return;
-        }
-        Log.d(TAG, "Pausing recording");
-        isPaused = true;
-        sIsPaused = true;
-        if (speechRecognizer != null) {
-            speechRecognizer.stopListening();
-        }
-        updateNotification(true);
+        Log.d(TAG, "Pause not supported in audio recording mode");
     }
 
     private void resumeRecording() {
-        if (!isRecording || !isPaused) {
-            return;
-        }
-        Log.d(TAG, "Resuming recording");
-        isPaused = false;
-        sIsPaused = false;
-        startListening();
-        updateNotification(false);
-    }
-
-    private void initializeSpeechRecognizer() {
-        if (speechRecognizer != null) {
-            speechRecognizer.destroy();
-        }
-        Log.d(TAG, "Initializing speech recognizer");
-        if (SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
-            Log.d(TAG, "Using on-device recognition");
-            speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
-        } else {
-            Log.d(TAG, "Using cloud recognition");
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
-        }
-        speechRecognizer.setRecognitionListener(new SpeechListener());
-    }
-
-    private void startListening() {
-        if (!isRecording || isPaused || speechRecognizer == null) {
-            Log.d(TAG, "Cannot start listening: recording=" + isRecording + ", paused=" + isPaused + ", recognizer=" + (speechRecognizer != null));
-            return;
-        }
-        Log.d(TAG, "Starting to listen");
-        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 30000);
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 10000);
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 10000);
-        try {
-            speechRecognizer.startListening(intent);
-        } catch (Exception e) {
-            Log.e(TAG, "Error starting listening", e);
-        }
-    }
-
-    private void saveTranscription() {
-        if (!lastPartialResult.isEmpty()) {
-            if (transcriptionBuffer.length() > 0) {
-                transcriptionBuffer.append(" ");
-            }
-            transcriptionBuffer.append(lastPartialResult);
-            lastPartialResult = "";
-        }
-        String content = transcriptionBuffer.toString().trim();
-        Log.d(TAG, "Saving transcription, length=" + content.length());
-        if (content.isEmpty()) {
-            Log.d(TAG, "No content to save");
-            mainHandler.post(() -> {
-                Intent errorIntent = new Intent(BROADCAST_ERROR);
-                errorIntent.putExtra(EXTRA_ERROR_MESSAGE, getString(R.string.no_speech_detected));
-                sendBroadcast(errorIntent);
-            });
-            return;
-        }
-        File file = FileHelper.saveNote(this, content);
-        if (file != null) {
-            Log.d(TAG, "Note saved to " + file.getAbsolutePath());
-            Intent broadcast = new Intent(BROADCAST_NOTE_SAVED);
-            broadcast.putExtra(EXTRA_FILENAME, file.getName());
-            sendBroadcast(broadcast);
-        } else {
-            Log.e(TAG, "Failed to save note");
-        }
+        Log.d(TAG, "Resume not supported in audio recording mode");
     }
 
     private Notification createNotification() {
-        return createNotification(false);
-    }
-
-    private Notification createNotification(boolean paused) {
         Intent stopIntent = new Intent(this, VoiceRecordingService.class);
         stopIntent.setAction(ACTION_STOP_RECORDING);
         PendingIntent stopPendingIntent = PendingIntent.getService(
@@ -243,23 +239,14 @@ public class VoiceRecordingService extends Service {
         PendingIntent openPendingIntent = PendingIntent.getActivity(
                 this, 0, openIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        String title = paused ? getString(R.string.paused) : getString(R.string.recording);
-
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle(title)
+                .setContentTitle(getString(R.string.recording))
                 .setSmallIcon(R.drawable.ic_mic)
                 .setContentIntent(openPendingIntent)
                 .addAction(R.drawable.ic_stop, getString(R.string.stop), stopPendingIntent)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();
-    }
-
-    private void updateNotification(boolean paused) {
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (manager != null) {
-            manager.notify(NOTIFICATION_ID, createNotification(paused));
-        }
     }
 
     private void createNotificationChannel() {
@@ -287,99 +274,5 @@ public class VoiceRecordingService extends Service {
 
     public static boolean isPaused() {
         return sIsPaused;
-    }
-
-    private class SpeechListener implements RecognitionListener {
-
-        @Override
-        public void onReadyForSpeech(Bundle params) {
-            Log.d(TAG, "Ready for speech");
-        }
-
-        @Override
-        public void onBeginningOfSpeech() {
-            Log.d(TAG, "Beginning of speech");
-        }
-
-        @Override
-        public void onRmsChanged(float rmsdB) {
-        }
-
-        @Override
-        public void onBufferReceived(byte[] buffer) {
-        }
-
-        @Override
-        public void onEndOfSpeech() {
-            Log.d(TAG, "End of speech");
-        }
-
-        @Override
-        public void onError(int error) {
-            String errorMsg = getErrorMessage(error);
-            Log.d(TAG, "Speech error: " + error + " (" + errorMsg + ")");
-            if (!isRecording || isPaused) {
-                return;
-            }
-            if (error == SpeechRecognizer.ERROR_NO_MATCH ||
-                    error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                mainHandler.postDelayed(() -> startListening(), 100);
-            } else if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
-                mainHandler.postDelayed(() -> startListening(), 500);
-            } else {
-                mainHandler.postDelayed(() -> {
-                    initializeSpeechRecognizer();
-                    startListening();
-                }, 500);
-            }
-        }
-
-        private String getErrorMessage(int error) {
-            switch (error) {
-                case SpeechRecognizer.ERROR_AUDIO: return "Audio error";
-                case SpeechRecognizer.ERROR_CLIENT: return "Client error";
-                case SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS: return "Insufficient permissions";
-                case SpeechRecognizer.ERROR_NETWORK: return "Network error";
-                case SpeechRecognizer.ERROR_NETWORK_TIMEOUT: return "Network timeout";
-                case SpeechRecognizer.ERROR_NO_MATCH: return "No match";
-                case SpeechRecognizer.ERROR_RECOGNIZER_BUSY: return "Recognizer busy";
-                case SpeechRecognizer.ERROR_SERVER: return "Server error";
-                case SpeechRecognizer.ERROR_SPEECH_TIMEOUT: return "Speech timeout";
-                default: return "Unknown error";
-            }
-        }
-
-        @Override
-        public void onResults(Bundle results) {
-            ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-            if (matches != null && !matches.isEmpty()) {
-                String text = matches.get(0);
-                if (transcriptionBuffer.length() > 0) {
-                    transcriptionBuffer.append(" ");
-                }
-                transcriptionBuffer.append(text);
-                Log.d(TAG, "Result: " + text);
-                Log.d(TAG, "Buffer now: " + transcriptionBuffer.toString());
-            }
-            if (isRecording && !isPaused) {
-                mainHandler.postDelayed(() -> startListening(), 100);
-            }
-        }
-
-        @Override
-        public void onPartialResults(Bundle partialResults) {
-            ArrayList<String> matches = partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-            if (matches != null && !matches.isEmpty()) {
-                String text = matches.get(0);
-                Log.d(TAG, "Partial: " + text);
-                if (text != null && !text.isEmpty()) {
-                    lastPartialResult = text;
-                }
-            }
-        }
-
-        @Override
-        public void onEvent(int eventType, Bundle params) {
-        }
     }
 }

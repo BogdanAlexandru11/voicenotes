@@ -15,46 +15,60 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-VoiceNotes is a minimal Android app for capturing voice notes using on-device speech-to-text. Optimized for Pixel devices with on-device speech recognition (Android 8.0+).
+VoiceNotes is a minimal Android app for capturing voice notes using local Whisper transcription via whisper.cpp. Records audio as PCM, then transcribes in background using WorkManager.
 
 **Core flow:**
-- Home screen widget triggers VoiceRecordingService via Intent
-- Service uses SpeechRecognizer for on-device transcription
-- Transcribed text saved as timestamped `.md` files to configurable folder
-- MainActivity displays notes grouped by month with sticky headers
+1. User starts recording via widget or FAB
+2. VoiceRecordingService captures PCM audio at 16kHz
+3. On stop, audio saved to cache and TranscriptionWorker queued
+4. Service finishes immediately (user can start new recording)
+5. TranscriptionWorker runs Whisper, saves note, broadcasts completion
 
 ## Architecture
 
 ```
-VoiceNotesWidget (AppWidgetProvider)
+VoiceNotesWidget / MainActivity
     │ Intent
     ▼
 VoiceRecordingService (Foreground Service)
-    │ SpeechRecognizer
+    │ AudioRecorder (PCM 16kHz mono)
+    │ savePcmToFile() → cache/audio_queue/
+    │ enqueueTranscription()
+    ▼
+TranscriptionWorker (WorkManager, sequential via APPEND)
+    │ WhisperTranscriber → WhisperContext (whisper.cpp)
     │ FileHelper.saveNote()
     ▼
 [Configurable folder]/*.md
-    │
-    ▼
-MainActivity (RecyclerView with month grouping)
 ```
 
-## Key Classes (to be implemented in `com.alex.voicenotes`)
+## Key Classes
 
 | File | Purpose |
 |------|---------|
-| `MainActivity.java` | Notes list with RecyclerView, FAB to record |
-| `VoiceRecordingService.java` | Foreground service managing SpeechRecognizer |
+| `MainActivity.java` | Notes list with RecyclerView, FAB, pull-to-refresh |
+| `VoiceRecordingService.java` | Foreground service, AudioRecorder, queues transcription |
+| `AudioRecorder.java` | PCM audio capture at 16kHz mono |
+| `TranscriptionWorker.java` | WorkManager worker for background Whisper transcription |
+| `WhisperTranscriber.java` | Java wrapper for Kotlin WhisperContext |
+| `WhisperModelManager.java` | Copies model from assets to internal storage |
 | `VoiceNotesWidget.java` | Home screen widget with record/stop toggle |
 | `FileHelper.java` | File I/O to configurable storage location |
-| `Note.java` | Data class for notes |
-| `ListItem.java` | Wrapper for grouped list items (headers + notes) |
-| `StickyHeaderDecoration.java` | RecyclerView decoration for sticky month headers |
+
+## Whisper Library (lib module)
+
+Native whisper.cpp integration:
+- `lib/src/main/cpp/whisper-cpp/` - whisper.cpp source
+- `lib/src/main/jni/whisper/` - JNI bindings and CMakeLists.txt
+- `lib/src/main/java/com/whispercpp/whisper/` - Kotlin wrapper (LibWhisper, WhisperContext)
+
+Model file: `app/src/main/assets/models/ggml-tiny.bin` (not in git, download from HuggingFace)
 
 ## Implementation Details
 
-- **Package:** `com.alex.voicenotes` (not `com.example.voicenotes`)
-- **Speech recognition:** Use `SpeechRecognizer.createOnDeviceSpeechRecognizer()` for offline Pixel model
+- **Package:** `com.alex.voicenotes`
+- **Audio format:** PCM 16-bit, 16kHz, mono (Whisper requirement)
+- **Transcription:** Sequential via WorkManager unique work with APPEND policy
 - **File naming:** `yyyy-MM-dd_HH-mm-ss.md` format
 - **Storage:** Configurable via Settings, defaults to Documents folder
 - **Service broadcasts:** `RECORDING_STARTED`, `RECORDING_STOPPED`, `NOTE_SAVED`, `ERROR`
@@ -62,15 +76,12 @@ MainActivity (RecyclerView with month grouping)
 ## Required Permissions
 
 ```
-RECORD_AUDIO, FOREGROUND_SERVICE, FOREGROUND_SERVICE_MICROPHONE, POST_NOTIFICATIONS
+RECORD_AUDIO, FOREGROUND_SERVICE, FOREGROUND_SERVICE_MICROPHONE, POST_NOTIFICATIONS, SYSTEM_ALERT_WINDOW
 ```
 
-## Implementation Order
+## Dependencies
 
-1. Project setup + permissions in AndroidManifest
-2. FileHelper and Note classes
-3. VoiceRecordingService with SpeechRecognizer
-4. MainActivity UI with RecyclerView
-5. VoiceNotesWidget
-6. Polish and error handling
-
+- whisper.cpp (lib module with NDK 25.2.9519653)
+- WorkManager for background transcription
+- SwipeRefreshLayout for pull-to-refresh
+- Biometric for app lock

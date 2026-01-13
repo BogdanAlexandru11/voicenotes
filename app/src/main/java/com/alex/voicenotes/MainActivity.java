@@ -6,8 +6,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.LayoutInflater;
@@ -25,6 +27,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
@@ -39,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int PERMISSION_REQUEST_CODE = 100;
 
     private RecyclerView recyclerView;
+    private SwipeRefreshLayout swipeRefresh;
     private GroupedNotesAdapter adapter;
     private FloatingActionButton fabRecord;
     private TextView textEmpty;
@@ -67,6 +71,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         recyclerView = findViewById(R.id.recyclerNotes);
+        swipeRefresh = findViewById(R.id.swipeRefresh);
         fabRecord = findViewById(R.id.fabRecord);
         textEmpty = findViewById(R.id.textEmpty);
         btnSettings = findViewById(R.id.btnSettings);
@@ -79,6 +84,11 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
         recyclerView.addItemDecoration(new StickyHeaderDecoration(adapter));
+
+        swipeRefresh.setOnRefreshListener(() -> {
+            refreshNotesList();
+            swipeRefresh.setRefreshing(false);
+        });
 
         timerHandler = new Handler(Looper.getMainLooper());
 
@@ -155,6 +165,19 @@ public class MainActivity extends AppCompatActivity {
         if (!permissions.isEmpty()) {
             ActivityCompat.requestPermissions(this,
                     permissions.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+        }
+
+        if (!Settings.canDrawOverlays(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.overlay_permission_required)
+                    .setMessage("Enable overlay permission to see live transcription while recording.")
+                    .setPositiveButton("Settings", (d, w) -> {
+                        Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:" + getPackageName()));
+                        startActivity(intent);
+                    })
+                    .setNegativeButton(R.string.cancel, null)
+                    .show();
         }
     }
 

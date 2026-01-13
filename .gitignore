@@ -27,3 +27,10 @@ proguard/
 *.hprof
 app/release/
 app/debug/
+
+# Whisper model files (download separately)
+app/src/main/assets/models/*.bin
+
+# Native build artifacts
+lib/.cxx/
+lib/build/

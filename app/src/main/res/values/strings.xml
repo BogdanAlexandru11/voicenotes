@@ -28,4 +28,7 @@
     <string name="auth_failed">Authentication failed</string>
     <string name="app_lock">App lock</string>
     <string name="app_lock_description">Require authentication to open app</string>
+    <string name="listening">Listening…</string>
+    <string name="overlay_permission_required">Overlay permission required for live transcription</string>
+    <string name="transcribing">Transcribing…</string>
 </resources>
