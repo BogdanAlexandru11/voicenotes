@@ -12,7 +12,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 import androidx.work.Data;
@@ -62,17 +61,17 @@ public class VoiceRecordingService extends Service {
         mainHandler = new Handler(Looper.getMainLooper());
         backgroundExecutor = Executors.newSingleThreadExecutor();
         createNotificationChannel();
-        Log.d(TAG, "Service created");
+        LogHelper.d(TAG, "Service created");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) {
-            Log.d(TAG, "Intent is null");
+            LogHelper.d(TAG, "Intent is null");
             return START_NOT_STICKY;
         }
         String action = intent.getAction();
-        Log.d(TAG, "Received action: " + action);
+        LogHelper.d(TAG, "Received action: " + action);
 
         if (ACTION_START_RECORDING.equals(action)) {
             startRecording();
@@ -88,7 +87,7 @@ public class VoiceRecordingService extends Service {
 
     @Override
     public void onDestroy() {
-        Log.d(TAG, "Service destroyed");
+        LogHelper.d(TAG, "Service destroyed");
         if (isRecording) {
             stopRecording();
         }
@@ -105,10 +104,10 @@ public class VoiceRecordingService extends Service {
 
     private void startRecording() {
         if (isRecording) {
-            Log.d(TAG, "Already recording, ignoring start");
+            LogHelper.d(TAG, "Already recording, ignoring start");
             return;
         }
-        Log.d(TAG, "Starting recording");
+        LogHelper.d(TAG, "Starting recording");
         isRecording = true;
         isPaused = false;
         sIsRecording = true;
@@ -131,9 +130,9 @@ public class VoiceRecordingService extends Service {
         backgroundExecutor.execute(() -> {
             try {
                 WhisperModelManager.ensureModelAvailable(this);
-                Log.d(TAG, "Whisper model ready");
+                LogHelper.d(TAG, "Whisper model ready");
             } catch (Exception e) {
-                Log.e(TAG, "Failed to prepare Whisper model", e);
+                LogHelper.e(TAG, "Failed to prepare Whisper model", e);
             }
         });
 
@@ -146,10 +145,10 @@ public class VoiceRecordingService extends Service {
 
     private void stopRecording() {
         if (!isRecording) {
-            Log.d(TAG, "Not recording, ignoring stop");
+            LogHelper.d(TAG, "Not recording, ignoring stop");
             return;
         }
-        Log.d(TAG, "Stopping recording");
+        LogHelper.d(TAG, "Stopping recording");
         isRecording = false;
         isPaused = false;
         sIsRecording = false;
@@ -171,7 +170,7 @@ public class VoiceRecordingService extends Service {
                 File audioFile = savePcmToFile(pcmData);
                 enqueueTranscription(audioFile);
             } catch (IOException e) {
-                Log.e(TAG, "Failed to save audio file", e);
+                LogHelper.e(TAG, "Failed to save audio file", e);
                 sendErrorBroadcast("Failed to save recording");
             }
         } else {
@@ -190,7 +189,7 @@ public class VoiceRecordingService extends Service {
         try (FileOutputStream fos = new FileOutputStream(audioFile)) {
             fos.write(pcmData);
         }
-        Log.d(TAG, "Saved audio to " + audioFile.getAbsolutePath() + " (" + pcmData.length + " bytes)");
+        LogHelper.d(TAG, "Saved audio to " + audioFile.getAbsolutePath() + " (" + pcmData.length + " bytes)");
         return audioFile;
     }
 
@@ -205,7 +204,7 @@ public class VoiceRecordingService extends Service {
 
         WorkManager.getInstance(this)
                 .enqueueUniqueWork("transcription", androidx.work.ExistingWorkPolicy.APPEND, workRequest);
-        Log.d(TAG, "Enqueued transcription for " + audioFile.getName());
+        LogHelper.d(TAG, "Enqueued transcription for " + audioFile.getName());
     }
 
     private void sendErrorBroadcast(String message) {
@@ -222,11 +221,11 @@ public class VoiceRecordingService extends Service {
     }
 
     private void pauseRecording() {
-        Log.d(TAG, "Pause not supported in audio recording mode");
+        LogHelper.d(TAG, "Pause not supported in audio recording mode");
     }
 
     private void resumeRecording() {
-        Log.d(TAG, "Resume not supported in audio recording mode");
+        LogHelper.d(TAG, "Resume not supported in audio recording mode");
     }
 
     private Notification createNotification() {

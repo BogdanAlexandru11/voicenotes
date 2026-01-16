@@ -2,7 +2,6 @@ package com.alex.voicenotes;
 
 import android.content.Context;
 import android.content.Intent;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.work.Data;
@@ -28,26 +27,26 @@ public class TranscriptionWorker extends Worker {
     public Result doWork() {
         String audioFilePath = getInputData().getString(KEY_AUDIO_FILE_PATH);
         if (audioFilePath == null) {
-            Log.e(TAG, "No audio file path provided");
+            LogHelper.e(TAG, "No audio file path provided");
             return Result.failure();
         }
 
         File audioFile = new File(audioFilePath);
         if (!audioFile.exists()) {
-            Log.e(TAG, "Audio file does not exist: " + audioFilePath);
+            LogHelper.e(TAG, "Audio file does not exist: " + audioFilePath);
             return Result.failure();
         }
 
         try {
             byte[] pcmData = readFile(audioFile);
             if (pcmData.length == 0) {
-                Log.e(TAG, "Audio file is empty");
+                LogHelper.e(TAG, "Audio file is empty");
                 audioFile.delete();
                 return Result.failure();
             }
 
             float[] audioSamples = pcmToFloat(pcmData);
-            Log.d(TAG, "Transcribing " + audioSamples.length + " samples (" + (audioSamples.length / 16000.0) + " seconds)");
+            LogHelper.d(TAG, "Transcribing " + audioSamples.length + " samples (" + (audioSamples.length / 16000.0) + " seconds)");
 
             WhisperTranscriber transcriber = new WhisperTranscriber();
             transcriber.initialize(getApplicationContext());
@@ -57,12 +56,12 @@ public class TranscriptionWorker extends Worker {
             audioFile.delete();
 
             if (transcription == null || transcription.isEmpty()) {
-                Log.d(TAG, "No transcription result");
+                LogHelper.d(TAG, "No transcription result");
                 sendErrorBroadcast("No speech detected");
                 return Result.success();
             }
 
-            Log.d(TAG, "Transcription result: " + transcription);
+            LogHelper.d(TAG, "Transcription result: " + transcription);
             File noteFile = FileHelper.saveNote(getApplicationContext(), transcription);
 
             if (noteFile != null) {
@@ -73,7 +72,7 @@ public class TranscriptionWorker extends Worker {
 
             return Result.success();
         } catch (Exception e) {
-            Log.e(TAG, "Transcription failed", e);
+            LogHelper.e(TAG, "Transcription failed", e);
             audioFile.delete();
             sendErrorBroadcast("Transcription failed: " + e.getMessage());
             return Result.failure();

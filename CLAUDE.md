@@ -54,6 +54,7 @@ TranscriptionWorker (WorkManager, sequential via APPEND)
 | `WhisperModelManager.java` | Copies model from assets to internal storage |
 | `VoiceNotesWidget.java` | Home screen widget with record/stop toggle |
 | `FileHelper.java` | File I/O to configurable storage location |
+| `LogHelper.java` | In-app logging with LogViewerActivity display |
 
 ## Whisper Library (lib module)
 

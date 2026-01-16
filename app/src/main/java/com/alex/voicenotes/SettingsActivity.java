@@ -27,6 +27,7 @@ public class SettingsActivity extends AppCompatActivity {
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
         findViewById(R.id.folderSetting).setOnClickListener(v -> openFolderPicker());
         resetFolder.setOnClickListener(v -> resetToDefault());
+        findViewById(R.id.viewLogs).setOnClickListener(v -> startActivity(new Intent(this, LogViewerActivity.class)));
 
         folderPickerLauncher = registerForActivityResult(
                 new ActivityResultContracts.OpenDocumentTree(),

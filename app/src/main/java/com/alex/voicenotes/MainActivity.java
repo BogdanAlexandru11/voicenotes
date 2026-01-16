@@ -31,11 +31,16 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -57,6 +62,7 @@ public class MainActivity extends AppCompatActivity {
     private Runnable timerRunnable;
     private int elapsedSeconds = 0;
     private boolean isPaused = false;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,6 +91,7 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setAdapter(adapter);
         recyclerView.addItemDecoration(new StickyHeaderDecoration(adapter));
 
+        swipeRefresh.setColorSchemeResources(R.color.primary);
         swipeRefresh.setOnRefreshListener(() -> {
             refreshNotesList();
             swipeRefresh.setRefreshing(false);
@@ -150,6 +157,12 @@ public class MainActivity extends AppCompatActivity {
         unregisterReceiver(noteReceiver);
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        executor.shutdown();
+    }
+
     private void requestPermissions() {
         List<String> permissions = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
@@ -187,10 +200,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void refreshNotesList() {
-        List<Note> notes = FileHelper.getAllNotes(this);
-        adapter.setNotes(notes);
-        textEmpty.setVisibility(notes.isEmpty() ? View.VISIBLE : View.GONE);
-        recyclerView.setVisibility(notes.isEmpty() ? View.GONE : View.VISIBLE);
+        executor.execute(() -> {
+            List<Note> notes = FileHelper.getAllNotes(this);
+            runOnUiThread(() -> {
+                adapter.setNotes(notes);
+                if (notes.isEmpty()) {
+                    textEmpty.setVisibility(View.VISIBLE);
+                    recyclerView.setVisibility(View.GONE);
+                } else {
+                    textEmpty.setVisibility(View.GONE);
+                    recyclerView.setVisibility(View.VISIBLE);
+                }
+            });
+        });
     }
 
     private void showNoteDetail(Note note) {
@@ -279,9 +301,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showRecordingSheet() {
+        dimBackground.setAlpha(0f);
         dimBackground.setVisibility(View.VISIBLE);
-        recordingSheet.setVisibility(View.VISIBLE);
-        fabRecord.setVisibility(View.GONE);
+        dimBackground.animate().alpha(1f).setDuration(200);
+
+        recordingSheet.post(() -> {
+            recordingSheet.setTranslationY(recordingSheet.getHeight());
+            recordingSheet.setVisibility(View.VISIBLE);
+            recordingSheet.animate()
+                    .translationY(0)
+                    .setDuration(250)
+                    .setInterpolator(new DecelerateInterpolator());
+        });
+
+        fabRecord.animate()
+                .scaleX(0f).scaleY(0f)
+                .setDuration(150)
+                .withEndAction(() -> fabRecord.setVisibility(View.GONE));
+
         elapsedSeconds = 0;
         isPaused = false;
         btnTimer.setText("00:00");
@@ -290,9 +327,25 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void hideRecordingSheet() {
-        dimBackground.setVisibility(View.GONE);
-        recordingSheet.setVisibility(View.GONE);
+        dimBackground.animate()
+                .alpha(0f)
+                .setDuration(200)
+                .withEndAction(() -> dimBackground.setVisibility(View.GONE));
+
+        recordingSheet.animate()
+                .translationY(recordingSheet.getHeight())
+                .setDuration(200)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> recordingSheet.setVisibility(View.GONE));
+
+        fabRecord.setScaleX(0f);
+        fabRecord.setScaleY(0f);
         fabRecord.setVisibility(View.VISIBLE);
+        fabRecord.animate()
+                .scaleX(1f).scaleY(1f)
+                .setDuration(200)
+                .setInterpolator(new OvershootInterpolator());
+
         stopTimer();
     }
 

@@ -94,6 +94,7 @@ TranscriptionWorker (WorkManager)
 
 - **Save location** - Configure a custom folder for saving notes (useful for syncing with Obsidian, Syncthing, etc.)
 - **App lock** - Biometric authentication
+- **View logs** - In-app debug log viewer for troubleshooting transcription issues
 
 ## License
 

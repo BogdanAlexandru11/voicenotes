@@ -1,7 +1,6 @@
 package com.alex.voicenotes;
 
 import android.content.Context;
-import android.util.Log;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -25,11 +24,11 @@ public class WhisperModelManager {
     public static void copyModelFromAssets(Context context) throws IOException {
         File modelFile = getModelFile(context);
         if (modelFile.exists()) {
-            Log.d(TAG, "Model already exists at " + modelFile.getAbsolutePath());
+            LogHelper.d(TAG, "Model already exists at " + modelFile.getAbsolutePath());
             return;
         }
 
-        Log.d(TAG, "Copying model from assets to " + modelFile.getAbsolutePath());
+        LogHelper.d(TAG, "Copying model from assets to " + modelFile.getAbsolutePath());
         try (InputStream is = context.getAssets().open(ASSETS_PATH);
              FileOutputStream fos = new FileOutputStream(modelFile)) {
             byte[] buffer = new byte[8192];
@@ -39,7 +38,7 @@ public class WhisperModelManager {
             }
             fos.flush();
         }
-        Log.d(TAG, "Model copied successfully, size: " + modelFile.length());
+        LogHelper.d(TAG, "Model copied successfully, size: " + modelFile.length());
     }
 
     public static void ensureModelAvailable(Context context) throws IOException {

@@ -1,7 +1,6 @@
 package com.alex.voicenotes;
 
 import android.content.Context;
-import android.util.Log;
 
 import com.whispercpp.whisper.WhisperContext;
 
@@ -17,9 +16,9 @@ public class WhisperTranscriber {
     public void initialize(Context context) throws Exception {
         WhisperModelManager.ensureModelAvailable(context);
         File modelFile = WhisperModelManager.getModelFile(context);
-        Log.d(TAG, "Loading model from: " + modelFile.getAbsolutePath());
+        LogHelper.d(TAG, "Loading model from: " + modelFile.getAbsolutePath());
         whisperContext = WhisperContext.Companion.createContextFromFile(modelFile.getAbsolutePath());
-        Log.d(TAG, "Whisper context initialized");
+        LogHelper.d(TAG, "Whisper context initialized");
     }
 
     public String transcribe(float[] audioSamples) throws Exception {
@@ -27,7 +26,7 @@ public class WhisperTranscriber {
             throw new IllegalStateException("Whisper context not initialized");
         }
 
-        Log.d(TAG, "Transcribing " + audioSamples.length + " samples");
+        LogHelper.d(TAG, "Transcribing " + audioSamples.length + " samples");
 
         final String[] result = new String[1];
         final Throwable[] error = new Throwable[1];
@@ -65,7 +64,7 @@ public class WhisperTranscriber {
                         (scope, continuation) -> whisperContext.release(continuation)
                 );
             } catch (Throwable e) {
-                Log.e(TAG, "Error releasing context", e);
+                LogHelper.e(TAG, "Error releasing context", e);
             }
             whisperContext = null;
         }

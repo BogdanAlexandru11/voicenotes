@@ -53,7 +53,9 @@ public class FloatingTranscriptionView {
         params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         params.y = 100;
 
+        floatingView.setAlpha(0f);
         windowManager.addView(floatingView, params);
+        floatingView.animate().alpha(1f).setDuration(200);
         isShowing = true;
     }
 
@@ -68,14 +70,20 @@ public class FloatingTranscriptionView {
             return;
         }
 
-        try {
-            windowManager.removeView(floatingView);
-        } catch (Exception ignored) {
-        }
-
+        isShowing = false;
+        final View viewToRemove = floatingView;
         floatingView = null;
         transcriptionText = null;
-        isShowing = false;
+
+        viewToRemove.animate()
+                .alpha(0f)
+                .setDuration(150)
+                .withEndAction(() -> {
+                    try {
+                        windowManager.removeView(viewToRemove);
+                    } catch (Exception ignored) {
+                    }
+                });
     }
 
     public boolean isShowing() {

@@ -42,6 +42,10 @@
             android:exported="false"
             android:theme="@style/Theme.VoiceNotes" />
 
+        <activity
+            android:name=".LogViewerActivity"
+            android:exported="false" />
+
         <service
             android:name=".VoiceRecordingService"
             android:enabled="true"

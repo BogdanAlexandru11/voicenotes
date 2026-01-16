@@ -31,4 +31,11 @@
     <string name="listening">Listening…</string>
     <string name="overlay_permission_required">Overlay permission required for live transcription</string>
     <string name="transcribing">Transcribing…</string>
+    <string name="logs">Logs</string>
+    <string name="view_logs">View logs</string>
+    <string name="view_logs_description">Debug information for troubleshooting</string>
+    <string name="no_logs">No logs yet</string>
+    <string name="logs_copied">Logs copied to clipboard</string>
+    <string name="copy">Copy</string>
+    <string name="clear">Clear</string>
 </resources>
